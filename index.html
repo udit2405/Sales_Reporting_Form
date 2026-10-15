@@ -2,17 +2,94 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Daily Sales Report</title>
-<style>body{font:16px system-ui,sans-serif;background:#f4f5f7;color:#1b1f27;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px;text-align:center}</style>
+<style>
+body{margin:0;background:#f4f5f7;color:#14171c;font:16px/1.4 Arial,sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:8px 0 16px}
+.card{background:#fff;border:1px solid #d9dde3;border-radius:10px;padding:14px;margin-bottom:14px}
+.card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#5d6673;margin:0 0 10px}
+label{display:block;font-size:14px;margin:10px 0 4px}
+input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #d9dde3;border-radius:8px}
+.code{font-size:13px;color:#5d6673;margin-top:6px;min-height:18px}
+button{width:100%;padding:14px;font-size:17px;font-weight:600;border:0;border-radius:10px;background:#1b4fd8;color:#fff;cursor:pointer}
+button:disabled{opacity:.5}
+#msg{margin-top:12px;font-weight:600;text-align:center}
+.ok{color:#117a3d}.err{color:#b3261e}
+</style>
 </head>
-<body>
-<p id="m">Opening the sales form…</p>
+<body><main>
+<h1>Daily Sales Report</h1>
+<form id="f" autocomplete="off">
+<div class="card"><h2>Store</h2>
+<label>Select store name</label>
+<input id="store" list="stores" placeholder="Type or pick a store" required>
+<datalist id="stores"></datalist>
+<div class="code" id="code"></div>
+<label>Date</label>
+<input id="date" type="date" required></div>
+
+<div class="card"><h2>VIP</h2>
+<label>VIP Sale</label><input data-f="VIP Sale" type="number" inputmode="decimal" step="any" min="0">
+<label>SKY Sale</label><input data-f="SKY Sale" type="number" inputmode="decimal" step="any" min="0">
+<label>ARI Sale</label><input data-f="ARI Sale" type="number" inputmode="decimal" step="any" min="0">
+<label>VIP Total Sale</label><input data-f="VIP Total Sale" type="number" inputmode="decimal" step="any" min="0">
+<label>VIP MTD Sale</label><input data-f="VIP MTD Sale" type="number" inputmode="decimal" step="any" min="0"></div>
+
+<div class="card"><h2>AT / KT</h2>
+<label>AT</label><input data-f="AT" type="number" inputmode="decimal" step="any" min="0">
+<label>KT</label><input data-f="KT" type="number" inputmode="decimal" step="any" min="0">
+<label>AT Total Sale</label><input data-f="AT TOTAL SALE" type="number" inputmode="decimal" step="any" min="0">
+<label>AT MTD</label><input data-f="AT MTD" type="number" inputmode="decimal" step="any" min="0"></div>
+
+<div class="card"><h2>Safari</h2>
+<label>Safari Sale</label><input data-f="SAFARI SALE" type="number" inputmode="decimal" step="any" min="0">
+<label>Safari MTD</label><input data-f="SAFARI MTD" type="number" inputmode="decimal" step="any" min="0"></div>
+
+<button id="go" type="submit">Submit</button>
+<div id="msg"></div>
+</form>
+</main>
 <script>
-// Paste the Apps Script web-app URL (ends in /exec) here. The form itself is served by the script (see apps-script.gs).
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyz92UZGT_1yTVdHBw0CVJUWX-xgyL8svLu8Pr0ubfihs0ZTzBQS8kifIspzZhfJd6i/exec";
-if (WEB_APP_URL) location.replace(WEB_APP_URL);
-else document.getElementById("m").textContent = "Form not connected yet.";
+// Apps Script web-app URL (ends in /exec) — it reads the store list from the sheet and writes the sales into it.
+var WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyz92UZGT_1yTVdHBw0CVJUWX-xgyL8svLu8Pr0ubfihs0ZTzBQS8kifIspzZhfJd6i/exec";
+
+var STORES = [];
+function $(id){ return document.getElementById(id); }
+function today(){ var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+$('date').value = today();
+
+fetch(WEB_APP_URL).then(function(r){ return r.json(); }).then(function(l){
+  STORES = l;
+  $('stores').innerHTML = l.map(function(s){ return '<option value="' + s.name.replace(/"/g, '&quot;') + '">'; }).join('');
+}).catch(function(){
+  $('msg').className = 'err'; $('msg').textContent = 'Could not load store list. Check internet and refresh.';
+});
+
+function find(){
+  var n = $('store').value.trim().toLowerCase();
+  for (var i = 0; i < STORES.length; i++) if (STORES[i].name.toLowerCase() === n) return STORES[i];
+  return null;
+}
+$('store').addEventListener('input', function(){ var s = find(); $('code').textContent = s ? 'SAP code: ' + s.code : ''; });
+
+$('f').addEventListener('submit', function(e){
+  e.preventDefault();
+  var m = $('msg'), s = find();
+  if (!s) { m.className = 'err'; m.textContent = 'Please pick a store from the list.'; return; }
+  var values = {};
+  document.querySelectorAll('[data-f]').forEach(function(i){ values[i.getAttribute('data-f')] = i.value; });
+  $('go').disabled = true; m.className = ''; m.textContent = 'Submitting...';
+  fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ code: s.code, date: $('date').value, values: values }) })
+  .then(function(){
+    m.className = 'ok'; m.textContent = 'Submitted for ' + s.name;
+    $('f').reset(); $('date').value = today(); $('code').textContent = ''; $('go').disabled = false;
+  }).catch(function(){
+    m.className = 'err'; m.textContent = 'Could not submit. Check internet and try again.'; $('go').disabled = false;
+  });
+});
 </script>
 </body>
 </html>
