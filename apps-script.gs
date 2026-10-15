@@ -1,25 +1,119 @@
-// Paste this into the Google Sheet: Extensions > Apps Script. Then Deploy > New deployment > Web app
-// (Execute as: Me, Who has access: Anyone). Copy the web-app URL into SCRIPT_URL in index.html.
-const SHEET_NAME = "Sales";
-const HEADERS = ["Submitted At","Store","Date","VIP Sale","SKY Sale","ARI Sale","VIP Total Sale","VIP MTD Sale",
-                 "AT","KT","AT Total Sale","AT MTD","Safari Sale","Safari MTD"];
-const KEYS = ["submitted_at","store","date","vip_sale","sky_sale","ari_sale","vip_total_sale","vip_mtd_sale",
-              "at_sale","kt_sale","at_total_sale","at_mtd","safari_sale","safari_mtd"];
+var FIELDS = ['VIP Sale', 'SKY Sale', 'ARI Sale', 'VIP Total Sale', 'VIP MTD Sale',
+              'AT', 'KT', 'AT TOTAL SALE', 'AT MTD', 'SAFARI SALE', 'SAFARI MTD'];
+var FIRST_VALUE_COL = 3;   // column C
+var STAMP_COL = 14;        // column N
+var DATE_COL = 15;         // column O (sales date picked on the form)
 
-function doPost(e) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    const d = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
-    if (sh.getLastRow() === 0) { sh.appendRow(HEADERS); sh.setFrozenRows(1); sh.getRange(1,1,1,HEADERS.length).setFontWeight("bold"); }
-    sh.appendRow(KEYS.map(k => {
-      const v = d[k];
-      return (k === "submitted_at" || k === "store" || k === "date") ? v : Number(v);
-    }));
-    return ContentService.createTextOutput("ok");
-  } finally {
-    lock.releaseLock();
-  }
+function doGet() {
+  return HtmlService.createHtmlOutput(PAGE_)
+    .setTitle('Daily Sales Report')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
+
+function sheet_() { return SpreadsheetApp.getActive().getSheets()[0]; }
+
+function getStores() {
+  var v = sheet_().getDataRange().getValues(), out = [];
+  for (var i = 1; i < v.length; i++) {
+    if (v[i][0] !== '' && v[i][1] !== '') out.push({ code: String(v[i][0]).trim(), name: String(v[i][1]).trim() });
+  }
+  return out;
+}
+
+function submitSale(code, values, dateStr) {
+  var sh = sheet_(), v = sh.getDataRange().getValues(), row = -1;
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]).trim() === String(code).trim()) { row = i + 1; break; }
+  }
+  if (row < 0) throw new Error('Store not found');
+  var vals = FIELDS.map(function (f) { return (values[f] === '' || values[f] == null) ? '' : Number(values[f]); });
+  sh.getRange(row, FIRST_VALUE_COL, 1, FIELDS.length).setValues([vals]);
+  sh.getRange(1, STAMP_COL).setValue('Last Updated');
+  sh.getRange(row, STAMP_COL).setValue(new Date());
+  sh.getRange(1, DATE_COL).setValue('Sales Date');
+  if (dateStr) {
+    var p = String(dateStr).split('-');
+    sh.getRange(row, DATE_COL).setValue(new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).setNumberFormat('dd-mmm-yyyy');
+  }
+  return 'ok';
+}
+
+var PAGE_ = `<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<base target="_top">
+<style>
+body{margin:0;background:#f4f5f7;color:#14171c;font:16px/1.4 Arial,sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:8px 0 16px}
+.card{background:#fff;border:1px solid #d9dde3;border-radius:10px;padding:14px;margin-bottom:14px}
+.card h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#5d6673;margin:0 0 10px}
+label{display:block;font-size:14px;margin:10px 0 4px}
+input{width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:1px solid #d9dde3;border-radius:8px}
+.code{font-size:13px;color:#5d6673;margin-top:6px;min-height:18px}
+button{width:100%;padding:14px;font-size:17px;font-weight:600;border:0;border-radius:10px;background:#1b4fd8;color:#fff;cursor:pointer}
+button:disabled{opacity:.5}
+#msg{margin-top:12px;font-weight:600;text-align:center}
+.ok{color:#117a3d}.err{color:#b3261e}
+</style></head><body><main>
+<h1>Daily Sales Report</h1>
+<form id="f" autocomplete="off">
+<div class="card"><h2>Store</h2>
+<label>Select store name</label>
+<input id="store" list="stores" placeholder="Type or pick a store" required>
+<datalist id="stores"></datalist>
+<div class="code" id="code"></div>
+<label>Date</label>
+<input id="date" type="date" required></div>
+
+<div class="card"><h2>VIP</h2>
+<label>VIP Sale</label><input data-f="VIP Sale" type="number" step="any" min="0">
+<label>SKY Sale</label><input data-f="SKY Sale" type="number" step="any" min="0">
+<label>ARI Sale</label><input data-f="ARI Sale" type="number" step="any" min="0">
+<label>VIP Total Sale</label><input data-f="VIP Total Sale" type="number" step="any" min="0">
+<label>VIP MTD Sale</label><input data-f="VIP MTD Sale" type="number" step="any" min="0"></div>
+
+<div class="card"><h2>AT / KT</h2>
+<label>AT</label><input data-f="AT" type="number" step="any" min="0">
+<label>KT</label><input data-f="KT" type="number" step="any" min="0">
+<label>AT Total Sale</label><input data-f="AT TOTAL SALE" type="number" step="any" min="0">
+<label>AT MTD</label><input data-f="AT MTD" type="number" step="any" min="0"></div>
+
+<div class="card"><h2>Safari</h2>
+<label>Safari Sale</label><input data-f="SAFARI SALE" type="number" step="any" min="0">
+<label>Safari MTD</label><input data-f="SAFARI MTD" type="number" step="any" min="0"></div>
+
+<button id="go" type="submit">Submit</button>
+<div id="msg"></div>
+</form>
+<script>
+var STORES = [];
+function $(id){ return document.getElementById(id); }
+function today(){ var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+$('date').value = today();
+function fill(){
+  var h = '';
+  for (var i = 0; i < STORES.length; i++) h += '<option value="' + STORES[i].name.replace(/"/g, '&quot;') + '">';
+  $('stores').innerHTML = h;
+}
+google.script.run.withSuccessHandler(function(l){ STORES = l; fill(); }).getStores();
+function find(){
+  var n = $('store').value.trim().toLowerCase();
+  for (var i = 0; i < STORES.length; i++) if (STORES[i].name.toLowerCase() === n) return STORES[i];
+  return null;
+}
+$('store').addEventListener('input', function(){ var s = find(); $('code').textContent = s ? 'SAP code: ' + s.code : ''; });
+$('f').addEventListener('submit', function(e){
+  e.preventDefault();
+  var m = $('msg'), s = find();
+  if (!s) { m.className = 'err'; m.textContent = 'Please pick a store from the list.'; return; }
+  var values = {};
+  var ins = document.querySelectorAll('[data-f]');
+  for (var i = 0; i < ins.length; i++) values[ins[i].getAttribute('data-f')] = ins[i].value;
+  $('go').disabled = true; m.className = ''; m.textContent = 'Submitting...';
+  google.script.run
+    .withSuccessHandler(function(){ m.className = 'ok'; m.textContent = 'Submitted for ' + s.name; $('f').reset(); $('date').value = today(); $('code').textContent = ''; $('go').disabled = false; })
+    .withFailureHandler(function(err){ m.className = 'err'; m.textContent = 'Could not submit: ' + err.message; $('go').disabled = false; })
+    .submitSale(s.code, values, $('date').value);
+});
+</script></main></body></html>`;

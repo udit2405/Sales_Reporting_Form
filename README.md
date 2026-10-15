@@ -1,12 +1,10 @@
 # Daily Sales Report Form
 
-Mobile-friendly form: pick store → enter VIP / SKY / ARI / AT / KT / Safari sales → Submit. Each submission becomes a new row in a Google Sheet (opens in Excel).
+Google Apps Script web app bound to the sales Google Sheet. Sheet layout: column A = SAP code, B = store name, C–M = the 11 sales values, N = Last Updated, O = Sales Date. The store dropdown is read from columns A–B; submitting writes into that store's row.
 
-## Connect the sheet (2 minutes)
-1. Open your Google Sheet → **Extensions → Apps Script**.
-2. Paste the contents of `apps-script.gs`, save.
-3. **Deploy → New deployment → Web app** · Execute as: *Me* · Access: *Anyone* → Deploy, authorize.
-4. Copy the web-app URL into `SCRIPT_URL` at the top of the script in `index.html`.
-5. Edit the `STORES` list in `index.html` with real store names.
+## Deploy
+1. Open the sheet → **Extensions → Apps Script**, paste `apps-script.gs`, save.
+2. **Deploy → New deployment → Web app** · Execute as *Me* · Access *Anyone*.
+3. Put the `/exec` URL into `WEB_APP_URL` in `index.html` (the GitHub Pages link then opens the form).
 
-Submissions made before the link is set are held on the user's phone and uploaded automatically later.
+After editing the script, use **Deploy → Manage deployments → Edit → New version** so the URL stays the same.
