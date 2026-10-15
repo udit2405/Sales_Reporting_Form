@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Sales Report</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --ink:#1b1f27; --muted:#6b7280; --line:#d9dce2; --accent:#1f4fd8; --ok:#157347; --err:#b42318; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:560px; margin:0 auto; padding:16px; }
+  h1 { font-size:22px; margin:8px 0 2px; }
+  .sub { color:var(--muted); margin:0 0 16px; font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .card h2 { font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 12px; }
+  label { display:block; font-weight:600; font-size:14px; margin:12px 0 4px; }
+  label:first-of-type { margin-top:0; }
+  input, select { width:100%; padding:12px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  input:focus, select:focus { outline:2px solid var(--accent); outline-offset:0; border-color:var(--accent); }
+  button { width:100%; padding:14px; font-size:17px; font-weight:600; color:#fff; background:var(--accent); border:0; border-radius:10px; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:default; }
+  #msg { margin-top:12px; padding:12px; border-radius:8px; display:none; font-size:15px; }
+  #msg.ok { display:block; background:#e7f5ee; color:var(--ok); }
+  #msg.err { display:block; background:#fdecea; color:var(--err); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Daily Sales Report</h1>
+  <p class="sub">Select your store, fill in the sales, and submit.</p>
+
+  <form id="f" autocomplete="off">
+    <div class="card">
+      <h2>Store</h2>
+      <label for="store">Store name</label>
+      <select id="store" name="store" required><option value="">— Select store —</option></select>
+      <label for="date">Date</label>
+      <input type="date" id="date" name="date" required>
+    </div>
+
+    <div class="card">
+      <h2>VIP</h2>
+      <label for="vip_sale">VIP Sale</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="vip_sale" name="vip_sale" required>
+      <label for="sky_sale">SKY Sale</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="sky_sale" name="sky_sale" required>
+      <label for="ari_sale">ARI Sale</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="ari_sale" name="ari_sale" required>
+      <label for="vip_total_sale">VIP Total Sale</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="vip_total_sale" name="vip_total_sale" required>
+      <label for="vip_mtd_sale">VIP MTD Sale</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="vip_mtd_sale" name="vip_mtd_sale" required>
+    </div>
+
+    <div class="card">
+      <h2>American Tourister / Kamiliant</h2>
+      <label for="at_sale">AT</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="at_sale" name="at_sale" required>
+      <label for="kt_sale">KT</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="kt_sale" name="kt_sale" required>
+      <label for="at_total_sale">AT Total Sale</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="at_total_sale" name="at_total_sale" required>
+      <label for="at_mtd">AT MTD</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="at_mtd" name="at_mtd" required>
+    </div>
+
+    <div class="card">
+      <h2>Safari</h2>
+      <label for="safari_sale">Safari Sale</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="safari_sale" name="safari_sale" required>
+      <label for="safari_mtd">Safari MTD</label>
+      <input type="number" inputmode="decimal" step="any" min="0" id="safari_mtd" name="safari_mtd" required>
+    </div>
+
+    <button type="submit" id="btn">Submit</button>
+    <div id="msg" role="status"></div>
+  </form>
+</div>
+
+<script>
+// ===== CONFIG =====
+// Paste the Google Apps Script web-app URL here (see README.md). Until then,
+// submissions are kept safely on the phone and sent automatically once it is set.
+const SCRIPT_URL = "";
+
+// Store list shown in the dropdown. Replace with the real store names.
+const STORES = [
+  "Store 1",
+  "Store 2",
+  "Store 3"
+];
+// ==================
+
+const FIELDS = ["vip_sale","sky_sale","ari_sale","vip_total_sale","vip_mtd_sale",
+                "at_sale","kt_sale","at_total_sale","at_mtd","safari_sale","safari_mtd"];
+const QUEUE_KEY = "sales_pending_v1";
+const $ = id => document.getElementById(id);
+
+STORES.forEach(s => { const o = document.createElement("option"); o.value = o.textContent = s; $("store").appendChild(o); });
+function today() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+$("date").value = today();
+
+function readQueue() { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch (e) { return []; } }
+function writeQueue(q) { try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch (e) {} }
+
+async function send(row) {
+  await fetch(SCRIPT_URL, { method:"POST", mode:"no-cors", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:JSON.stringify(row) });
+}
+async function flush() {
+  if (!SCRIPT_URL) return 0;
+  let q = readQueue(), sent = 0;
+  while (q.length) {
+    try { await send(q[0]); q.shift(); writeQueue(q); sent++; } catch (e) { break; }
+  }
+  return sent;
+}
+function show(kind, text) { const m = $("msg"); m.className = kind; m.textContent = text; }
+
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const row = { submitted_at: new Date().toISOString(), store: $("store").value, date: $("date").value };
+  FIELDS.forEach(k => row[k] = $(k).value);
+  const q = readQueue(); q.push(row); writeQueue(q);
+  $("btn").disabled = true; show("", "");
+  if (!SCRIPT_URL) {
+    show("err", "Saved on this phone, but the Excel link is not connected yet. It will upload automatically once connected.");
+  } else {
+    await flush();
+    if (readQueue().length) show("err", "No internet. Saved on this phone — it will upload when you reopen this page online.");
+    else show("ok", "Submitted ✔ Thank you. Your report is in the sheet.");
+  }
+  if (!readQueue().length || !SCRIPT_URL) {
+    FIELDS.forEach(k => $(k).value = "");
+    $("store").value = ""; $("date").value = today();
+  }
+  $("btn").disabled = false;
+});
+
+flush();
+window.addEventListener("online", flush);
+</script>
+</body>
+</html>
